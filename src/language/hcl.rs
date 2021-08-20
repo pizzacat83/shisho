@@ -29,7 +29,7 @@ impl Queryable for HCL {
         Ok(body.named_children(&mut cursor).collect())
     }
 
-    fn is_leaf(node: &tree_sitter::Node) -> bool {
+    fn is_special_leaf(node: &tree_sitter::Node) -> bool {
         node.kind() == "quoted_template"
     }
 
@@ -37,9 +37,13 @@ impl Queryable for HCL {
         match node.kind() {
             "attribute" => {
                 let mut cursor = node.walk();
-                let bracket = node.children(&mut cursor).skip(node.child_count()-2).next().unwrap();
+                let bracket = node
+                    .children(&mut cursor)
+                    .skip(node.child_count() - 2)
+                    .next()
+                    .unwrap();
                 (node.start_position(), bracket.end_position())
-            },
+            }
             _ => (node.start_position(), node.end_position()),
         }
     }

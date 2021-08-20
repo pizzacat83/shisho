@@ -24,7 +24,7 @@ impl Queryable for Go {
         Ok(source_file.named_children(&mut cursor).collect())
     }
 
-    fn is_leaf(_node: &tree_sitter::Node) -> bool {
+    fn is_special_leaf(_node: &tree_sitter::Node) -> bool {
         false
     }
 

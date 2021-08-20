@@ -226,7 +226,7 @@ where
                 ))?;
                 self.walk_metavariable(node, vname)
             }
-            _ if self.child_count(node) == 0 || T::is_leaf(&node) => self.walk_leaf_node(node),
+            _ if self.child_count(node) == 0 || T::is_special_leaf(&node) => self.walk_leaf_node(node),
             _ => self.walk_intermediate_node(node),
         }
     }

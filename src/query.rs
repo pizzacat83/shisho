@@ -250,6 +250,8 @@ where
                 .node_as_str(&node)
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n");
+            let v = T::normalize_leaf(&v);
+
             Ok(TSQueryString::new(
                 if v == "" {
                     "".into()
