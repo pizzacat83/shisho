@@ -51,6 +51,7 @@ impl Queryable for HCL {
 
 #[cfg(test)]
 mod tests {
+    use crate::matcher::MatchedItem;
     use crate::query::MetavariableId;
     use crate::transform::Transformable;
     use crate::tree::Tree;
@@ -69,7 +70,7 @@ mod tests {
 
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            assert_eq!(session.collect().len(), 1);
+            assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 1);
         }
 
         {
@@ -80,7 +81,7 @@ mod tests {
 
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            assert_eq!(session.collect().len(), 1);
+            assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 1);
         }
 
         {
@@ -102,7 +103,7 @@ mod tests {
 
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let result = session.collect();
+            let result = session.collect::<Vec<MatchedItem>>();
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].captures.len(), 2);
         }
@@ -127,7 +128,7 @@ mod tests {
 
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            assert_eq!(session.collect().len(), 2);
+            assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 2);
         }
 
         {
@@ -171,7 +172,7 @@ mod tests {
             )
             .unwrap();
             let session = ptree.matches(&query);
-            assert_eq!(session.collect().len(), 2);
+            assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 2);
         }
     }
 
@@ -220,7 +221,7 @@ mod tests {
 
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            assert_eq!(session.collect().len(), 3);
+            assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 3);
         }
         {
             let tree = Tree::<HCL>::try_from(
@@ -266,7 +267,7 @@ mod tests {
                 )
                 .unwrap();
                 let session = ptree.matches(&query);
-                assert_eq!(session.collect().len(), 1);
+                assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 1);
             }
             {
                 let query = Query::<HCL>::try_from(
@@ -278,7 +279,7 @@ mod tests {
                 )
                 .unwrap();
                 let session = ptree.matches(&query);
-                assert_eq!(session.collect().len(), 2);
+                assert_eq!(session.collect::<Vec<MatchedItem>>().len(), 2);
             }
         }
     }
@@ -303,7 +304,7 @@ mod tests {
             .unwrap();
 
             let ptree = tree.to_partial();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -329,7 +330,7 @@ mod tests {
             .unwrap();
 
             let ptree = tree.to_partial();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -361,7 +362,7 @@ mod tests {
             .unwrap();
 
             let ptree = tree.to_partial();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 2);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -392,7 +393,7 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -406,7 +407,7 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -446,7 +447,7 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -492,7 +493,7 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -512,7 +513,7 @@ mod tests {
             )
             .unwrap();
 
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 2);
             assert_eq!(
                 c[1].get_captured_string(&MetavariableId("X".into())),
@@ -532,7 +533,7 @@ mod tests {
             )
             .unwrap();
 
-            let c = ptree.matches(&query).collect();
+            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -554,15 +555,12 @@ mod tests {
         let ptree = tree.to_partial();
 
         let query = Query::<HCL>::try_from(r#"resource "rtype" "rname" { attr = :[_] }"#).unwrap();
-        let item = {
-            let session = ptree.matches(&query);
-            let mut items = session.collect();
-            assert_eq!(items.len(), 1);
-            items.pop().unwrap()
-        };
+        let session = ptree.matches(&query);
+        let mut c = session.collect::<Vec<MatchedItem>>();
+        assert_eq!(c.len(), 1);
 
         let from_code = code.transform(
-            item,
+            c.pop().unwrap(),
             "resource \"rtype\" \"rname\" { attr = \"changed\" }\n",
         );
         assert!(from_code.is_ok());
@@ -584,14 +582,11 @@ mod tests {
         let query = Query::<HCL>::try_from("resource \"rtype\" \"rname\" { attr = :[X] }\nresource \"rtype\" \"another\" { attr = :[Y] }\n")
             .unwrap();
 
-        let item = {
-            let session = ptree.matches(&query);
-            let mut items = session.collect();
-            assert_eq!(items.len(), 1);
-            items.pop().unwrap()
-        };
+        let session = ptree.matches(&query);
+        let mut c = session.collect::<Vec<MatchedItem>>();
+        assert_eq!(c.len(), 1);
 
-        let from_code = code.transform(item, "resource \"rtype\" \"rname\" { attr = :[Y] }\nresource \"rtype\" \"another\" { attr = :[X] }\n");
+        let from_code = code.transform(c.pop().unwrap(), "resource \"rtype\" \"rname\" { attr = :[Y] }\nresource \"rtype\" \"another\" { attr = :[X] }\n");
         assert!(from_code.is_ok());
 
         assert_eq!(

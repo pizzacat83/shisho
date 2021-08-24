@@ -43,7 +43,8 @@ impl Queryable for Dockerfile {
 mod tests {
     use super::*;
     use crate::{
-        query::{MetavariableId, Query, TSQueryString},
+        matcher::MatchedItem,
+        query::{MetavariableId, Query},
         tree::Tree,
     };
     use std::convert::TryFrom;
@@ -55,7 +56,7 @@ mod tests {
             let tree = Tree::<Dockerfile>::try_from(r#"FROM name"#).unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let c = session.collect();
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("A".into())),
@@ -68,7 +69,7 @@ mod tests {
             let tree = Tree::<Dockerfile>::try_from(r#"FROM name:tag"#).unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let c = session.collect();
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("A".into())),
@@ -86,7 +87,7 @@ mod tests {
             let tree = Tree::<Dockerfile>::try_from(r#"FROM name:tag@hash"#).unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let c = session.collect();
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("A".into())),
@@ -109,7 +110,7 @@ mod tests {
             let tree = Tree::<Dockerfile>::try_from(r#"FROM name:tag@hash as alias"#).unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let c = session.collect();
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("A".into())),
@@ -133,19 +134,13 @@ mod tests {
     #[test]
     fn test_run_instruction() {
         {
-            println!(
-                "{}",
-                TSQueryString::<Dockerfile>::try_from(r#"RUN :[X]"#)
-                    .unwrap()
-                    .query_string
-            );
             let query = Query::<Dockerfile>::try_from(r#"RUN :[X]"#).unwrap();
             let tree =
                 Tree::<Dockerfile>::try_from(r#"RUN echo "hosts: files dns" > /etc/nsswitch.conf"#)
                     .unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let c = session.collect();
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -162,7 +157,7 @@ mod tests {
             let tree = Tree::<Dockerfile>::try_from(r#"COPY ./ /app"#).unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
-            let c = session.collect();
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),

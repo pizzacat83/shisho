@@ -35,7 +35,7 @@ pub struct Rule {
 impl Rule {
     pub fn find<'tree, 'item, T: 'static>(
         &self,
-        tree: &'tree PartialTree<'tree, 'tree, T>,
+        tree: &'tree PartialTree<'tree, T>,
     ) -> Result<Vec<MatchedItem<'item>>>
     where
         T: Queryable,
@@ -51,7 +51,7 @@ impl Rule {
         let session = tree.matches(&query);
 
         Ok(session
-            .collect()
+            .collect::<Vec<MatchedItem>>()
             .into_iter()
             .filter(|x| x.satisfies_all(&constraints))
             .collect())

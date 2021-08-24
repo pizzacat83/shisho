@@ -1,9 +1,9 @@
 use crate::{
     language::Queryable,
-    matcher::QueryMatcher,
+    matcher::{MatchedItem, QueryMatcher},
     query::{
-        CaptureId, Query, SHISHO_NODE_ELLIPSIS, SHISHO_NODE_ELLIPSIS_METAVARIABLE,
-        SHISHO_NODE_METAVARIABLE, SHISHO_NODE_METAVARIABLE_NAME,
+        Query, SHISHO_NODE_ELLIPSIS, SHISHO_NODE_ELLIPSIS_METAVARIABLE, SHISHO_NODE_METAVARIABLE,
+        SHISHO_NODE_METAVARIABLE_NAME,
     },
 };
 use anyhow::{anyhow, Result};
@@ -30,7 +30,7 @@ where
         }
     }
 
-    pub fn to_partial<'node, 'tree>(&'tree self) -> PartialTree<'tree, 'node, T> {
+    pub fn to_partial<'tree>(&'tree self) -> PartialTree<'tree, T> {
         PartialTree::new(self.tstree.root_node(), self.raw.as_slice())
     }
 }
@@ -47,20 +47,17 @@ impl<'a, 'tree, T> AsRef<[u8]> for Tree<T> {
     }
 }
 
-pub struct PartialTree<'tree, 'node, T>
-where
-    'tree: 'node,
-{
+pub struct PartialTree<'tree, T> {
     raw: &'tree [u8],
-    top: tree_sitter::Node<'node>,
+    top: tree_sitter::Node<'tree>,
     _marker: PhantomData<T>,
 }
 
-impl<'tree, 'node, T> PartialTree<'tree, 'node, T>
+impl<'tree, T> PartialTree<'tree, T>
 where
     T: Queryable,
 {
-    pub fn new(top: tree_sitter::Node<'node>, raw: &'tree [u8]) -> PartialTree<'tree, 'node, T> {
+    pub fn new(top: tree_sitter::Node<'tree>, raw: &'tree [u8]) -> PartialTree<'tree, T> {
         PartialTree {
             top,
             raw,
@@ -71,7 +68,7 @@ where
     pub fn matches<'query>(
         &'tree self,
         query: &'query Query<T>,
-    ) -> QueryMatcher<'tree, 'node, 'query, T>
+    ) -> impl Iterator<Item = MatchedItem<'tree>> + 'query
     where
         'tree: 'query,
     {
@@ -79,13 +76,13 @@ where
     }
 }
 
-impl<'a, 'tree, 'node, T> AsRef<tree_sitter::Node<'node>> for PartialTree<'tree, 'node, T> {
-    fn as_ref(&self) -> &tree_sitter::Node<'node> {
+impl<'tree, T> AsRef<tree_sitter::Node<'tree>> for PartialTree<'tree, T> {
+    fn as_ref(&self) -> &tree_sitter::Node<'tree> {
         &self.top
     }
 }
 
-impl<'a, 'tree, 'node, T> AsRef<[u8]> for PartialTree<'tree, 'node, T> {
+impl<'tree, T> AsRef<[u8]> for PartialTree<'tree, T> {
     fn as_ref(&self) -> &[u8] {
         &self.raw
     }
@@ -238,9 +235,5 @@ where
 
     fn children_of(&self, node: tree_sitter::Node) -> usize {
         node.child_count()
-    }
-
-    fn capture_id_of(&self, node: &tree_sitter::Node) -> CaptureId {
-        CaptureId(format!("{}", node.id()))
     }
 }
