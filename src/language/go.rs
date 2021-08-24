@@ -24,7 +24,7 @@ impl Queryable for Go {
         Ok(source_file.named_children(&mut cursor).collect())
     }
 
-    fn is_special_leaf(_node: &tree_sitter::Node) -> bool {
+    fn is_leaf(_node: &tree_sitter::Node) -> bool {
         false
     }
 
@@ -35,6 +35,7 @@ impl Queryable for Go {
 
 #[cfg(test)]
 mod tests {
+    use crate::query::TSQueryString;
     use crate::transform::Transformable;
     use crate::{
         code::Code,
@@ -212,6 +213,14 @@ mod tests {
             .unwrap();
             let ptree = tree.to_partial();
             {
+                println!(
+                    "{}",
+                    TSQueryString::<Go>::try_from(
+                        r#"func (:[X] *Receiver) f(a int, b string, c int) int { return 1 }"#,
+                    )
+                    .unwrap()
+                    .query_string
+                );
                 let query = Query::<Go>::try_from(
                     r#"func (:[X] *Receiver) f(a int, b string, c int) int { return 1 }"#,
                 )

@@ -26,7 +26,7 @@ impl Queryable for Dockerfile {
         Ok(source_file.named_children(&mut cursor).collect())
     }
 
-    fn is_special_leaf(_node: &tree_sitter::Node) -> bool {
+    fn is_leaf(_node: &tree_sitter::Node) -> bool {
         false
     }
 
@@ -133,14 +133,13 @@ mod tests {
     #[test]
     fn test_run_instruction() {
         {
-            let query = Query::<Dockerfile>::try_from(r#"RUN :[X]"#).unwrap();
-
             println!(
                 "{}",
                 TSQueryString::<Dockerfile>::try_from(r#"RUN :[X]"#)
                     .unwrap()
                     .query_string
             );
+            let query = Query::<Dockerfile>::try_from(r#"RUN :[X]"#).unwrap();
             let tree =
                 Tree::<Dockerfile>::try_from(r#"RUN echo "hosts: files dns" > /etc/nsswitch.conf"#)
                     .unwrap();
@@ -149,8 +148,8 @@ mod tests {
             let c = session.collect();
             assert_eq!(c.len(), 1);
             assert_eq!(
-                c[0].get_captured_string(&MetavariableId("A".into())),
-                Some("name")
+                c[0].get_captured_string(&MetavariableId("X".into())),
+                Some(r#"echo "hosts: files dns" > /etc/nsswitch.conf"#)
             );
         }
     }
@@ -160,9 +159,7 @@ mod tests {
         {
             let query = Query::<Dockerfile>::try_from(r#"COPY :[X] :[Y]"#).unwrap();
 
-            let tree =
-                Tree::<Dockerfile>::try_from(r#"COPY ./ /app"#)
-                    .unwrap();
+            let tree = Tree::<Dockerfile>::try_from(r#"COPY ./ /app"#).unwrap();
             let ptree = tree.to_partial();
             let session = ptree.matches(&query);
             let c = session.collect();

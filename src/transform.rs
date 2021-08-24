@@ -77,11 +77,8 @@ where
         variable_name: &str,
     ) -> Result<Self::Output, anyhow::Error> {
         let id = MetavariableId(variable_name.into());
-        let value = self
-            .item
-            .get_captured_string(&id)
-            .unwrap_or_default();
-            // .ok_or(anyhow!("metavariable not found"))?;
+        let value = self.item.get_captured_string(&id).unwrap_or_default();
+        // .ok_or(anyhow!("metavariable not found"))?;
         Ok(PatchedItem {
             body: value.into(),
             start_byte: node.start_byte(),
@@ -105,9 +102,20 @@ where
         ))
     }
 
-    fn walk_leaf_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
+    fn walk_leaf_named_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
         Ok(PatchedItem {
-            body: self.node_as_str(&node).into(),
+            body: self.value_of(&node).into(),
+            start_byte: node.start_byte(),
+            end_byte: node.end_byte(),
+        })
+    }
+
+    fn walk_leaf_unnamed_node(
+        &self,
+        node: tree_sitter::Node,
+    ) -> Result<Self::Output, anyhow::Error> {
+        Ok(PatchedItem {
+            body: self.value_of(&node).into(),
             start_byte: node.start_byte(),
             end_byte: node.end_byte(),
         })
@@ -134,7 +142,7 @@ where
         })
     }
 
-    fn node_as_str(&self, node: &tree_sitter::Node) -> &'tree str {
+    fn value_of(&self, node: &tree_sitter::Node) -> &'tree str {
         let raw = self.pattern.pattern.as_ref();
         std::str::from_utf8(&raw[node.start_byte()..node.end_byte()]).unwrap()
     }

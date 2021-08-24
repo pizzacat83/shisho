@@ -29,7 +29,7 @@ impl Queryable for HCL {
         Ok(body.named_children(&mut cursor).collect())
     }
 
-    fn is_special_leaf(node: &tree_sitter::Node) -> bool {
+    fn is_leaf(node: &tree_sitter::Node) -> bool {
         node.kind() == "quoted_template"
     }
 
@@ -51,7 +51,7 @@ impl Queryable for HCL {
 
 #[cfg(test)]
 mod tests {
-    use crate::query::{MetavariableId, TSQueryString};
+    use crate::query::MetavariableId;
     use crate::transform::Transformable;
     use crate::tree::Tree;
     use crate::{code::Code, query::Query};
@@ -580,9 +580,6 @@ mod tests {
         let tree_base = code.clone();
         let tree = Tree::<HCL>::try_from(tree_base.as_str()).unwrap();
         let ptree = tree.to_partial();
-
-        println!("{}",TSQueryString::<HCL>::try_from("resource \"rtype\" \"rname\" { attr = :[X] }\nresource \"rtype\" \"another\" { attr = :[Y] }\n")
-        .unwrap().query_string);
 
         let query = Query::<HCL>::try_from("resource \"rtype\" \"rname\" { attr = :[X] }\nresource \"rtype\" \"another\" { attr = :[Y] }\n")
             .unwrap();

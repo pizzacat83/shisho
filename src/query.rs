@@ -142,7 +142,7 @@ where
     fn try_from(value: Pattern<T>) -> Result<Self, anyhow::Error> {
         let query_tree = value.to_tstree()?;
 
-        let processor = RawQueryProcessor::<T>::from(value.as_ref());
+        let processor = TSQueryGenerator::<T>::from(value.as_ref());
         let queries = T::extract_query_nodes(&query_tree)?;
         let queries = queries
             .into_iter()
@@ -207,7 +207,7 @@ impl ToQueryConstraintString for MetavariableTable {
 }
 
 #[derive(Debug, PartialEq)]
-struct RawQueryProcessor<'a, T>
+struct TSQueryGenerator<'a, T>
 where
     T: Queryable,
 {
@@ -215,52 +215,55 @@ where
     _marker: PhantomData<T>,
 }
 
-impl<'a, T> From<&'a [u8]> for RawQueryProcessor<'a, T>
+impl<'a, T> From<&'a [u8]> for TSQueryGenerator<'a, T>
 where
     T: Queryable,
 {
     fn from(value: &'a [u8]) -> Self {
-        RawQueryProcessor {
+        TSQueryGenerator {
             raw_bytes: value,
             _marker: PhantomData,
         }
     }
 }
 
-impl<'a, T> TSTreeVisitor<'a, T> for RawQueryProcessor<'a, T>
+impl<'a, T> TSTreeVisitor<'a, T> for TSQueryGenerator<'a, T>
 where
     T: Queryable,
 {
     type Output = TSQueryString<T>;
 
-    fn walk_leaf_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
-        if node.is_named() {
-            Ok(TSQueryString::new(
-                format!(
-                    r#"(({}) @{} (#eq? @{} "{}"))"#,
-                    node.kind(),
-                    node.id(),
-                    node.id(),
-                    self.node_as_str(&node).replace("\"", "\\\"")
-                ),
-                MetavariableTable::new(),
-            ))
-        } else {
-            let v = self
-                .node_as_str(&node)
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n");
-            let v = T::normalize_leaf(&v);
+    fn walk_leaf_named_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
+        let cid = self.capture_id_of(&node);
+        Ok(TSQueryString::new(
+            format!(
+                r#"(({}) @{} {})"#,
+                node.kind(),
+                cid.as_ref().to_string(),
+                T::generate_node_constraints(&node, self.value_of(&node), &cid),
+            ),
+            MetavariableTable::new(),
+        ))
+    }
 
-            Ok(TSQueryString::new(
-                if v == "" {
-                    "".into()
-                } else {
-                    format!(r#""{}""#, v)
-                },
-                MetavariableTable::new(),
-            ))
-        }
+    fn walk_leaf_unnamed_node(
+        &self,
+        node: tree_sitter::Node,
+    ) -> Result<Self::Output, anyhow::Error> {
+        let v = self
+            .value_of(&node)
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n");
+        let v = T::normalize_leaf(&v);
+
+        Ok(TSQueryString::new(
+            if v == "" {
+                "".into()
+            } else {
+                format!(r#""{}""#, v)
+            },
+            MetavariableTable::new(),
+        ))
     }
 
     fn walk_ellipsis(&self, _node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
@@ -275,7 +278,7 @@ where
         node: tree_sitter::Node,
         variable_name: &str,
     ) -> Result<Self::Output, anyhow::Error> {
-        let capture_id = self.node_as_capture_id(&node);
+        let capture_id = self.capture_id_of(&node);
 
         // NOTE: into_iter() can't be used here https://github.com/rust-lang/rust/pull/84147
         let metavariables = IntoIter::new([(
@@ -299,7 +302,7 @@ where
         node: tree_sitter::Node,
         variable_name: &str,
     ) -> Result<Self::Output, anyhow::Error> {
-        let capture_id = self.node_as_capture_id(&node);
+        let capture_id = self.capture_id_of(&node);
 
         // NOTE: into_iter() can't be used here https://github.com/rust-lang/rust/pull/84147
         let metavariables = IntoIter::new([(
@@ -314,7 +317,7 @@ where
         ))
     }
 
-    fn node_as_str(&self, node: &tree_sitter::Node) -> &'a str {
+    fn value_of(&self, node: &tree_sitter::Node) -> &'a str {
         std::str::from_utf8(&self.raw_bytes[node.start_byte()..node.end_byte()]).unwrap()
     }
 

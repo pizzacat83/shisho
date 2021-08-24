@@ -158,11 +158,12 @@ where
 {
     type Output;
 
-    fn walk_leaf_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
-        Err(anyhow!(
-            "internal error: walker function for leaf nodes is undefined"
-        ))
-    }
+    fn walk_leaf_named_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error>;
+
+    fn walk_leaf_unnamed_node(
+        &self,
+        node: tree_sitter::Node,
+    ) -> Result<Self::Output, anyhow::Error>;
 
     fn walk_intermediate_node(
         &self,
@@ -183,53 +184,47 @@ where
         children: Vec<Self::Output>,
     ) -> Result<Self::Output, anyhow::Error>;
 
-    fn walk_ellipsis(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
-        Err(anyhow!(
-            "internal error: walker function for ellipsis operators is undefined"
-        ))
-    }
+    fn walk_ellipsis(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error>;
 
     fn walk_ellipsis_metavariable(
         &self,
         node: tree_sitter::Node,
         variable_name: &str,
-    ) -> Result<Self::Output, anyhow::Error> {
-        Err(anyhow!(
-            "internal error: walker function for ellipsis metavariables is undefined"
-        ))
-    }
+    ) -> Result<Self::Output, anyhow::Error>;
 
     fn walk_metavariable(
         &self,
         node: tree_sitter::Node,
         variable_name: &str,
-    ) -> Result<Self::Output, anyhow::Error> {
-        Err(anyhow!(
-            "internal error: walker function for metavariables is undefined"
-        ))
-    }
+    ) -> Result<Self::Output, anyhow::Error>;
 
     fn handle_node(&self, node: tree_sitter::Node) -> Result<Self::Output, anyhow::Error> {
         match node.kind() {
             SHISHO_NODE_ELLIPSIS => self.walk_ellipsis(node),
-            SHISHO_NODE_ELLIPSIS_METAVARIABLE => {
-                let vname = self.extract_vname_from_node(&node).ok_or(anyhow!(
-                    "{} did not have {}",
-                    SHISHO_NODE_ELLIPSIS_METAVARIABLE,
-                    SHISHO_NODE_METAVARIABLE_NAME
-                ))?;
-                self.walk_ellipsis_metavariable(node, vname)
+            s if s == SHISHO_NODE_ELLIPSIS_METAVARIABLE || s == SHISHO_NODE_METAVARIABLE => {
+                let variable_name = node
+                    .named_children(&mut node.walk())
+                    .find(|child| child.kind() == SHISHO_NODE_METAVARIABLE_NAME)
+                    .map(|child| self.value_of(&child))
+                    .ok_or(anyhow!(
+                        "{} did not have {}",
+                        SHISHO_NODE_ELLIPSIS_METAVARIABLE,
+                        SHISHO_NODE_METAVARIABLE_NAME
+                    ))?;
+                if s == SHISHO_NODE_ELLIPSIS_METAVARIABLE {
+                    self.walk_ellipsis_metavariable(node, variable_name)
+                } else if s == SHISHO_NODE_METAVARIABLE {
+                    self.walk_metavariable(node, variable_name)
+                } else {
+                    panic!("invalid state")
+                }
             }
-            SHISHO_NODE_METAVARIABLE => {
-                let vname = self.extract_vname_from_node(&node).ok_or(anyhow!(
-                    "{} did not have {}",
-                    SHISHO_NODE_METAVARIABLE,
-                    SHISHO_NODE_METAVARIABLE_NAME
-                ))?;
-                self.walk_metavariable(node, vname)
-            }
-            _ if self.child_count(node) == 0 || T::is_special_leaf(&node) => {
-                self.walk_leaf_node(node)
+            _ if (self.children_of(node) == 0 || T::is_leaf(&node)) => {
+                if node.is_named() {
+                    self.walk_leaf_named_node(node)
+                } else {
+                    self.walk_leaf_unnamed_node(node)
+                }
             }
             _ => self.walk_intermediate_node(node),
         }
@@ -239,22 +234,13 @@ where
         self.handle_node(tree.root_node())
     }
 
-    fn child_count(&self, node: tree_sitter::Node) -> usize {
+    fn value_of(&self, node: &tree_sitter::Node) -> &'tree str;
+
+    fn children_of(&self, node: tree_sitter::Node) -> usize {
         node.child_count()
     }
 
-    fn node_as_str(&self, node: &tree_sitter::Node) -> &'tree str;
-
-    fn extract_vname_from_node(&self, node: &tree_sitter::Node) -> Option<&'tree str> {
-        let mut cursor = node.walk();
-        let r = node
-            .named_children(&mut cursor)
-            .find(|child| child.kind() == SHISHO_NODE_METAVARIABLE_NAME)
-            .map(|child| self.node_as_str(&child));
-        r
-    }
-
-    fn node_as_capture_id(&self, node: &tree_sitter::Node) -> CaptureId {
+    fn capture_id_of(&self, node: &tree_sitter::Node) -> CaptureId {
         CaptureId(format!("{}", node.id()))
     }
 }
