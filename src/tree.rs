@@ -107,7 +107,9 @@ where
     fn from(value: &'a str) -> Self {
         let value = value.to_string();
         RawTree {
-            raw_bytes: if value.as_bytes()[value.as_bytes().len() - 1] != b'\n' {
+            raw_bytes: if value.as_bytes().len() != 0
+                && value.as_bytes()[value.as_bytes().len() - 1] != b'\n'
+            {
                 [value.as_bytes(), "\n".as_bytes()].concat()
             } else {
                 value.into()
@@ -226,7 +228,9 @@ where
                 ))?;
                 self.walk_metavariable(node, vname)
             }
-            _ if self.child_count(node) == 0 || T::is_special_leaf(&node) => self.walk_leaf_node(node),
+            _ if self.child_count(node) == 0 || T::is_special_leaf(&node) => {
+                self.walk_leaf_node(node)
+            }
             _ => self.walk_intermediate_node(node),
         }
     }

@@ -49,7 +49,7 @@ mod tests {
     use std::convert::TryFrom;
 
     #[test]
-    fn test_basic_query() {
+    fn test_from_instruction() {
         {
             let query = Query::<Dockerfile>::try_from(r#"FROM :[A]"#).unwrap();
             let tree = Tree::<Dockerfile>::try_from(r#"FROM name"#).unwrap();
@@ -127,6 +127,54 @@ mod tests {
                 c[0].get_captured_string(&MetavariableId("ALIAS".into())),
                 Some("alias")
             );
-        }        
+        }
+    }
+
+    #[test]
+    fn test_run_instruction() {
+        {
+            let query = Query::<Dockerfile>::try_from(r#"RUN :[X]"#).unwrap();
+
+            println!(
+                "{}",
+                TSQueryString::<Dockerfile>::try_from(r#"RUN :[X]"#)
+                    .unwrap()
+                    .query_string
+            );
+            let tree =
+                Tree::<Dockerfile>::try_from(r#"RUN echo "hosts: files dns" > /etc/nsswitch.conf"#)
+                    .unwrap();
+            let ptree = tree.to_partial();
+            let session = ptree.matches(&query);
+            let c = session.collect();
+            assert_eq!(c.len(), 1);
+            assert_eq!(
+                c[0].get_captured_string(&MetavariableId("A".into())),
+                Some("name")
+            );
+        }
+    }
+
+    #[test]
+    fn test_copy_instruction() {
+        {
+            let query = Query::<Dockerfile>::try_from(r#"COPY :[X] :[Y]"#).unwrap();
+
+            let tree =
+                Tree::<Dockerfile>::try_from(r#"COPY ./ /app"#)
+                    .unwrap();
+            let ptree = tree.to_partial();
+            let session = ptree.matches(&query);
+            let c = session.collect();
+            assert_eq!(c.len(), 1);
+            assert_eq!(
+                c[0].get_captured_string(&MetavariableId("X".into())),
+                Some("./")
+            );
+            assert_eq!(
+                c[0].get_captured_string(&MetavariableId("Y".into())),
+                Some("/app")
+            );
+        }
     }
 }

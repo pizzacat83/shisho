@@ -80,7 +80,8 @@ where
         let value = self
             .item
             .get_captured_string(&id)
-            .ok_or(anyhow!("metavariable not found"))?;
+            .unwrap_or_default();
+            // .ok_or(anyhow!("metavariable not found"))?;
         Ok(PatchedItem {
             body: value.into(),
             start_byte: node.start_byte(),
