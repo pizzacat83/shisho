@@ -31,6 +31,9 @@ where
 
     pub fn tsnodes(&self) -> Vec<tree_sitter::Node> {
         T::get_query_nodes(&self.tsquery)
+            .into_iter()
+            .filter(|n| !T::is_skippable(n))
+            .collect()
     }
 }
 

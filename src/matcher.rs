@@ -1,15 +1,15 @@
-use anyhow::{anyhow, Result};
-use tree_sitter::Point;
-
 use crate::{
     constraint::{Constraint, Predicate},
     language::Queryable,
+    node::ConsecutiveNodes,
     query::{
         MetavariableId, Query, SHISHO_NODE_ELLIPSIS, SHISHO_NODE_ELLIPSIS_METAVARIABLE,
         SHISHO_NODE_METAVARIABLE, SHISHO_NODE_METAVARIABLE_NAME,
     },
     tree::PartialTree,
 };
+use anyhow::{anyhow, Result};
+use itertools::Itertools;
 use std::collections::HashMap;
 
 pub struct QueryMatcher<'tree, 'query, T>
@@ -25,7 +25,7 @@ where
 
 type UnverifiedMetavariable<'tree> = (MetavariableId, CaptureItem<'tree>);
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MatcherState<'tree> {
     subtree: Option<ConsecutiveNodes<'tree>>,
     captures: Vec<UnverifiedMetavariable<'tree>>,
@@ -71,7 +71,6 @@ where
         tsibilings: Vec<tree_sitter::Node<'tree>>,
         qsibilings: Vec<tree_sitter::Node<'query>>,
     ) -> Vec<MatcherState<'tree>> {
-        // verify children
         let mut queue: Vec<(usize, usize, Vec<UnverifiedMetavariable>)> = vec![(0, 0, vec![])];
         let mut result: Vec<MatcherState> = vec![];
 
@@ -81,9 +80,18 @@ where
                     subtree: Some(ConsecutiveNodes::from(tsibilings.clone())),
                     captures,
                 }),
-                (Some(tchild), Some(qchild))
-                    if qchild.kind() == SHISHO_NODE_ELLIPSIS
-                        || qchild.kind() == SHISHO_NODE_ELLIPSIS_METAVARIABLE =>
+                (Some(_tchild), Some(qchild)) if qchild.kind() == SHISHO_NODE_ELLIPSIS => {
+                    let mut captured_nodes = vec![];
+                    for tcidx in tidx..(tsibilings.len() + 1) {
+                        queue.push((tcidx, qidx + 1, captures.clone()));
+                        if let Some(tchild) = tsibilings.get(tcidx) {
+                            captured_nodes.push(tchild.clone());
+                        }
+                    }
+                }
+
+                (Some(_tchild), Some(qchild))
+                    if qchild.kind() == SHISHO_NODE_ELLIPSIS_METAVARIABLE =>
                 {
                     let mid = MetavariableId(self.variable_name_of(&qchild).to_string());
                     let mut captured_nodes = vec![];
@@ -129,6 +137,11 @@ where
                 vec![Default::default()]
             }
             (Some(tnode), Some(qnode)) => {
+                // println!(
+                //     "{:?} {:?}",
+                //     self.tree.value_of(&tnode),
+                //     self.query.value_of(&qnode)
+                // );
                 let subtree = ConsecutiveNodes::from(vec![tnode]);
 
                 match qnode.kind() {
@@ -140,7 +153,7 @@ where
                             captures: vec![(mid, item)],
                         }]
                     }
-                    _ if qnode.child_count() == 0 || T::is_leaf(&qnode) => {
+                    _ if qnode.child_count() == 0 || T::is_leaf_like(&qnode) => {
                         // TODO: care about patterns in string especially if string constraint
                         if self.tree.value_of(&tnode) == self.query.value_of(&qnode) {
                             vec![MatcherState {
@@ -157,8 +170,14 @@ where
                             return vec![];
                         }
 
-                        let tchildren = tnode.children(&mut tnode.walk()).collect();
-                        let qchildren = qnode.children(&mut qnode.walk()).collect();
+                        let tchildren = tnode
+                            .children(&mut tnode.walk())
+                            .filter(|n| !T::is_skippable(n))
+                            .collect();
+                        let qchildren = qnode
+                            .children(&mut qnode.walk())
+                            .filter(|n| !T::is_skippable(n))
+                            .collect();
                         self.match_sibillings(tchildren, qchildren)
                             .into_iter()
                             .map(|submatch| MatcherState {
@@ -203,17 +222,33 @@ where
             }
 
             if let Some(tnode) = self.yield_next_node() {
-                let matches = self.match_subtree(Some(tnode), Some(qnodes[0]));
+                let mut tnode = Some(tnode);
+                let mut matches = vec![];
+                for qnode in qnodes.clone() {
+                    // println!("[+] {:?}", self.query.value_of(&qnode));
+                    matches.push(self.match_subtree(tnode, Some(qnode)));
+                    tnode = tnode.and_then(|t| t.next_sibling());
+                }
+                // println!("{:?}", matches);
+                for mitems in matches.into_iter().multi_cartesian_product() {
+                    let area = ConsecutiveNodes::from(
+                        mitems
+                            .iter()
+                            .map(|mitem| mitem.subtree.as_ref().unwrap().clone())
+                            .collect::<Vec<ConsecutiveNodes>>(),
+                    );
 
-                // TODO: convert matcherState -> MatchedItem validating equivalence
-                for mitem in matches {
+                    // TODO: convert matcherState -> MatchedItem validating equivalence
+                    let captures = mitems
+                        .into_iter()
+                        .map(|mitem| mitem.captures)
+                        .flatten()
+                        .collect::<HashMap<MetavariableId, CaptureItem>>();
+
                     self.items.push(MatchedItem {
                         raw: self.tree.as_ref(),
-                        top: mitem.subtree.unwrap(),
-                        captures: mitem
-                            .captures
-                            .into_iter()
-                            .collect::<HashMap<MetavariableId, CaptureItem>>(),
+                        area,
+                        captures,
                     });
                 }
             } else {
@@ -226,13 +261,14 @@ where
 #[derive(Debug)]
 pub struct MatchedItem<'tree> {
     pub raw: &'tree [u8],
-    pub top: ConsecutiveNodes<'tree>,
+    pub area: ConsecutiveNodes<'tree>,
     pub captures: HashMap<MetavariableId, CaptureItem<'tree>>,
 }
 
 impl<'tree> MatchedItem<'tree> {
-    pub fn get_captured_string(&'tree self, id: &MetavariableId) -> Option<&'tree str> {
+    pub fn value_of(&'tree self, id: &MetavariableId) -> Option<&'tree str> {
         let capture = self.captures.get(&id)?;
+
         match capture {
             CaptureItem::Empty => None,
             CaptureItem::Literal(s) => Some(s.as_str()),
@@ -240,7 +276,7 @@ impl<'tree> MatchedItem<'tree> {
         }
     }
 
-    pub fn get_captured_items(&self, id: &MetavariableId) -> Option<&CaptureItem> {
+    pub fn capture_of(&self, id: &MetavariableId) -> Option<&CaptureItem> {
         self.captures.get(&id)
     }
 
@@ -260,7 +296,7 @@ impl<'tree> MatchedItem<'tree> {
 
         match &constraint.predicate {
             Predicate::MatchQuery(q) => {
-                let captured_item = self.get_captured_items(&constraint.target).unwrap();
+                let captured_item = self.capture_of(&constraint.target).unwrap();
                 match captured_item {
                     CaptureItem::Empty => Ok(false),
                     CaptureItem::Literal(_) => Err(anyhow!(
@@ -274,7 +310,7 @@ impl<'tree> MatchedItem<'tree> {
                 }
             }
             Predicate::NotMatchQuery(q) => {
-                let captured_item = self.get_captured_items(&constraint.target).unwrap();
+                let captured_item = self.capture_of(&constraint.target).unwrap();
                 match captured_item {
                     CaptureItem::Empty => Ok(true),
                     CaptureItem::Literal(_) => Err(anyhow!(
@@ -288,11 +324,9 @@ impl<'tree> MatchedItem<'tree> {
                 }
             }
 
-            Predicate::MatchRegex(r) => {
-                Ok(r.is_match(self.get_captured_string(&constraint.target).unwrap()))
-            }
+            Predicate::MatchRegex(r) => Ok(r.is_match(self.value_of(&constraint.target).unwrap())),
             Predicate::NotMatchRegex(r) => {
-                Ok(!r.is_match(self.get_captured_string(&constraint.target).unwrap()))
+                Ok(!r.is_match(self.value_of(&constraint.target).unwrap()))
             }
         }
     }
@@ -305,62 +339,13 @@ pub enum CaptureItem<'tree> {
     Nodes(ConsecutiveNodes<'tree>),
 }
 
-#[derive(Debug, Clone)]
-pub struct ConsecutiveNodes<'tree>(Vec<tree_sitter::Node<'tree>>);
-
 impl<'tree> From<Vec<tree_sitter::Node<'tree>>> for CaptureItem<'tree> {
     fn from(value: Vec<tree_sitter::Node<'tree>>) -> Self {
         if value.len() == 0 {
             Self::Empty
         } else {
             // TODO (y0n3uchy): check all capture items are consecutive
-            Self::Nodes(ConsecutiveNodes(value))
+            Self::Nodes(ConsecutiveNodes::from(value))
         }
-    }
-}
-
-impl<'tree> From<Vec<tree_sitter::Node<'tree>>> for ConsecutiveNodes<'tree> {
-    fn from(value: Vec<tree_sitter::Node<'tree>>) -> Self {
-        if value.len() == 0 {
-            panic!("internal error; ConsecutiveNodes was generated from empty vec.");
-        }
-        ConsecutiveNodes(value)
-    }
-}
-
-impl<'tree> ConsecutiveNodes<'tree> {
-    pub fn as_vec(&self) -> &Vec<tree_sitter::Node<'tree>> {
-        &self.0
-    }
-
-    pub fn push(&mut self, n: tree_sitter::Node<'tree>) {
-        self.0.push(n)
-    }
-
-    pub fn start_position(&self) -> Point {
-        self.as_vec().first().unwrap().start_position()
-    }
-
-    pub fn end_position(&self) -> Point {
-        self.as_vec().last().unwrap().end_position()
-    }
-
-    pub fn range_for_view<T: Queryable + 'static>(&self) -> (Point, Point) {
-        (
-            T::range_for_view(self.as_vec().first().unwrap()).0,
-            T::range_for_view(self.as_vec().last().unwrap()).1,
-        )
-    }
-
-    pub fn start_byte(&self) -> usize {
-        self.as_vec().first().unwrap().start_byte()
-    }
-
-    pub fn end_byte(&self) -> usize {
-        self.as_vec().last().unwrap().end_byte()
-    }
-
-    pub fn utf8_text<'a>(&self, source: &'a [u8]) -> Result<&'a str, core::str::Utf8Error> {
-        core::str::from_utf8(&source[self.start_byte()..self.end_byte()])
     }
 }

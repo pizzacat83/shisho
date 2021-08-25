@@ -86,7 +86,7 @@ where
         variable_name: &str,
     ) -> Result<Self::Output, anyhow::Error> {
         let id = MetavariableId(variable_name.into());
-        let value = self.item.get_captured_string(&id).unwrap_or_default();
+        let value = self.item.value_of(&id).unwrap_or_default();
         // .ok_or(anyhow!("metavariable not found"))?;
         Ok(PatchedItem {
             body: value.into(),
@@ -195,10 +195,10 @@ where
     fn transform_with_query(self, item: MatchedItem, query: AutofixPattern<T>) -> Result<Self> {
         let current_code = self.as_str().as_bytes();
 
-        let before_snippet = String::from_utf8(current_code[0..item.top.start_byte()].to_vec())?;
+        let before_snippet = String::from_utf8(current_code[0..item.area.start_byte()].to_vec())?;
         let snippet = query.to_patched_snippet(&item)?;
         let after_snippet = String::from_utf8(
-            current_code[item.top.end_byte().min(current_code.len())..current_code.len()].to_vec(),
+            current_code[item.area.end_byte().min(current_code.len())..current_code.len()].to_vec(),
         )?;
 
         Ok(Code::from(format!(

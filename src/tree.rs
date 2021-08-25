@@ -207,7 +207,7 @@ where
                     panic!("invalid state")
                 }
             }
-            _ if (self.children_of(node) == 0 || T::is_leaf(&node)) => {
+            _ if (self.children_of(node) == 0 || T::is_leaf_like(&node)) => {
                 if node.is_named() {
                     self.walk_leaf_named_node(node)
                 } else {

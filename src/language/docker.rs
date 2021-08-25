@@ -19,11 +19,7 @@ impl Queryable for Dockerfile {
         let source_file = root.root_node();
 
         let mut cursor = source_file.walk();
-        source_file.named_children(&mut cursor).collect()
-    }
-
-    fn is_leaf(_node: &tree_sitter::Node) -> bool {
-        false
+        source_file.children(&mut cursor).collect()
     }
 
     fn range_for_view(node: &tree_sitter::Node) -> (tree_sitter::Point, tree_sitter::Point) {
@@ -54,10 +50,7 @@ mod tests {
             let session = ptree.matches(&query);
             let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("A".into())),
-                Some("name")
-            );
+            assert_eq!(c[0].value_of(&MetavariableId("A".into())), Some("name"));
         }
 
         {
@@ -67,14 +60,8 @@ mod tests {
             let session = ptree.matches(&query);
             let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("A".into())),
-                Some("name")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("B".into())),
-                Some("tag")
-            );
+            assert_eq!(c[0].value_of(&MetavariableId("A".into())), Some("name"));
+            assert_eq!(c[0].value_of(&MetavariableId("B".into())), Some("tag"));
         }
 
         {
@@ -85,18 +72,9 @@ mod tests {
             let session = ptree.matches(&query);
             let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("A".into())),
-                Some("name")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("B".into())),
-                Some("tag")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("HASH".into())),
-                Some("hash")
-            );
+            assert_eq!(c[0].value_of(&MetavariableId("A".into())), Some("name"));
+            assert_eq!(c[0].value_of(&MetavariableId("B".into())), Some("tag"));
+            assert_eq!(c[0].value_of(&MetavariableId("HASH".into())), Some("hash"));
         }
 
         {
@@ -108,20 +86,11 @@ mod tests {
             let session = ptree.matches(&query);
             let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
+            assert_eq!(c[0].value_of(&MetavariableId("A".into())), Some("name"));
+            assert_eq!(c[0].value_of(&MetavariableId("B".into())), Some("tag"));
+            assert_eq!(c[0].value_of(&MetavariableId("HASH".into())), Some("hash"));
             assert_eq!(
-                c[0].get_captured_string(&MetavariableId("A".into())),
-                Some("name")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("B".into())),
-                Some("tag")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("HASH".into())),
-                Some("hash")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("ALIAS".into())),
+                c[0].value_of(&MetavariableId("ALIAS".into())),
                 Some("alias")
             );
         }
@@ -139,7 +108,7 @@ mod tests {
             let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
-                c[0].get_captured_string(&MetavariableId("X".into())),
+                c[0].value_of(&MetavariableId("X".into())),
                 Some(r#"echo "hosts: files dns" > /etc/nsswitch.conf"#)
             );
         }
@@ -155,14 +124,8 @@ mod tests {
             let session = ptree.matches(&query);
             let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("X".into())),
-                Some("./")
-            );
-            assert_eq!(
-                c[0].get_captured_string(&MetavariableId("Y".into())),
-                Some("/app")
-            );
+            assert_eq!(c[0].value_of(&MetavariableId("X".into())), Some("./"));
+            assert_eq!(c[0].value_of(&MetavariableId("Y".into())), Some("/app"));
         }
     }
 }
