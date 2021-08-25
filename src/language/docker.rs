@@ -26,6 +26,10 @@ impl Queryable for Dockerfile {
         (node.start_position(), node.end_position())
     }
 
+    fn is_skippable(node: &tree_sitter::Node) -> bool {
+        node.kind() == "\n"
+    }
+
     fn normalize_leaf(s: &str) -> String {
         s.to_ascii_uppercase()
     }

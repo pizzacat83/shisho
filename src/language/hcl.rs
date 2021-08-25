@@ -29,6 +29,10 @@ impl Queryable for HCL {
         node.kind() == "quoted_template"
     }
 
+    fn is_skippable(node: &tree_sitter::Node) -> bool {
+        node.kind() == "\n"
+    }
+
     fn range_for_view(node: &tree_sitter::Node) -> (tree_sitter::Point, tree_sitter::Point) {
         match node.kind() {
             "attribute" => {

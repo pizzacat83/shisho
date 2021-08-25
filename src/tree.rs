@@ -37,7 +37,7 @@ where
 }
 
 pub struct PartialTree<'tree, T> {
-    pub(crate) top: tree_sitter::Node<'tree>,
+    pub(crate) root: tree_sitter::Node<'tree>,
 
     raw: &'tree [u8],
     _marker: PhantomData<T>,
@@ -49,7 +49,7 @@ where
 {
     pub fn new(top: tree_sitter::Node<'tree>, raw: &'tree [u8]) -> PartialTree<'tree, T> {
         PartialTree {
-            top,
+            root: top,
             raw,
             _marker: PhantomData,
         }

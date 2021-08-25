@@ -9,7 +9,6 @@ use crate::{
     tree::PartialTree,
 };
 use anyhow::{anyhow, Result};
-use itertools::Itertools;
 use std::collections::HashMap;
 
 pub struct QueryMatcher<'tree, 'query, T>
@@ -61,7 +60,7 @@ where
         QueryMatcher {
             query,
             tree,
-            cursor: Some(tree.top.walk()),
+            cursor: Some(tree.root.walk()),
             items: vec![],
         }
     }
@@ -137,13 +136,7 @@ where
                 vec![Default::default()]
             }
             (Some(tnode), Some(qnode)) => {
-                // println!(
-                //     "{:?} {:?}",
-                //     self.tree.value_of(&tnode),
-                //     self.query.value_of(&qnode)
-                // );
                 let subtree = ConsecutiveNodes::from(vec![tnode]);
-
                 match qnode.kind() {
                     s if s == SHISHO_NODE_METAVARIABLE => {
                         let mid = MetavariableId(self.variable_name_of(&qnode).to_string());
@@ -215,40 +208,37 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let qnodes = self.query.tsnodes();
-
-        loop {
+        let ql = qnodes.len();
+        'iter: loop {
             if let Some(mitem) = self.items.pop() {
                 return Some(mitem);
             }
 
             if let Some(tnode) = self.yield_next_node() {
-                let mut tnode = Some(tnode);
-                let mut matches = vec![];
-                for qnode in qnodes.clone() {
-                    // println!("[+] {:?}", self.query.value_of(&qnode));
-                    matches.push(self.match_subtree(tnode, Some(qnode)));
-                    tnode = tnode.and_then(|t| t.next_sibling());
+                let mut tsibilings = vec![];
+                let mut tnode = tnode;
+                while {
+                    if !T::is_skippable(&tnode) {
+                        tsibilings.push(tnode);
+                    }
+                    tsibilings.len() < ql
+                } {
+                    if let Some(tnode_) = tnode.next_sibling() {
+                        tnode = tnode_;
+                    } else {
+                        continue 'iter;
+                    }
                 }
-                // println!("{:?}", matches);
-                for mitems in matches.into_iter().multi_cartesian_product() {
-                    let area = ConsecutiveNodes::from(
-                        mitems
-                            .iter()
-                            .map(|mitem| mitem.subtree.as_ref().unwrap().clone())
-                            .collect::<Vec<ConsecutiveNodes>>(),
-                    );
 
+                for mitem in self.match_sibillings(tsibilings, qnodes.clone()) {
                     // TODO: convert matcherState -> MatchedItem validating equivalence
-                    let captures = mitems
-                        .into_iter()
-                        .map(|mitem| mitem.captures)
-                        .flatten()
-                        .collect::<HashMap<MetavariableId, CaptureItem>>();
-
                     self.items.push(MatchedItem {
                         raw: self.tree.as_ref(),
-                        area,
-                        captures,
+                        area: mitem.subtree.unwrap(),
+                        captures: mitem
+                            .captures
+                            .into_iter()
+                            .collect::<HashMap<MetavariableId, CaptureItem>>(),
                     });
                 }
             } else {
