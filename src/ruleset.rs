@@ -51,9 +51,7 @@ impl Rule {
         let session = tree.matches(&query);
 
         Ok(session
-            .collect::<Vec<MatchedItem>>()
-            .into_iter()
-            .filter(|x| x.satisfies_all(&constraints))
+            .filter(|x| x.satisfies_all(&constraints).unwrap_or(false))
             .collect())
     }
 }

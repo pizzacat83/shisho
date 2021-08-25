@@ -15,16 +15,22 @@ pub struct Query<T>
 where
     T: Queryable,
 {
-    query: tree_sitter::Tree,
+    pub(crate) tsquery: tree_sitter::Tree,
+
+    raw: Vec<u8>,
     _marker: PhantomData<T>,
 }
 
-impl<T> AsRef<tree_sitter::Tree> for Query<T>
+impl<T> Query<T>
 where
     T: Queryable,
 {
-    fn as_ref(&self) -> &tree_sitter::Tree {
-        &self.query
+    pub fn value_of(&self, node: &tree_sitter::Node) -> &str {
+        node.utf8_text(self.raw.as_slice()).unwrap()
+    }
+
+    pub fn tsnodes(&self) -> Vec<tree_sitter::Node> {
+        T::get_query_nodes(&self.tsquery)
     }
 }
 
@@ -52,7 +58,8 @@ where
     fn try_from(value: Pattern<T>) -> Result<Self, anyhow::Error> {
         let query = value.to_tstree()?;
         Ok(Query {
-            query,
+            tsquery: query,
+            raw: value.as_ref().to_vec(),
             _marker: PhantomData,
         })
     }

@@ -1,5 +1,3 @@
-use anyhow::{anyhow, Result};
-
 use super::Queryable;
 
 #[derive(Debug, Clone)]
@@ -14,19 +12,17 @@ impl Queryable for HCL {
         tree_sitter_hcl_query::language()
     }
 
-    fn extract_query_nodes<'tree>(
-        root: &'tree tree_sitter::Tree,
-    ) -> Result<Vec<tree_sitter::Node<'tree>>> {
+    fn get_query_nodes<'tree>(root: &'tree tree_sitter::Tree) -> Vec<tree_sitter::Node<'tree>> {
         // TODO (y0n3uchy): this should be done more strictly.
 
         // see `//third_party/tree-sitter-hcl-query/grammar.js`
         let source_file = root.root_node();
         let body = source_file
             .child(0)
-            .ok_or(anyhow!("failed to load the code; no root element"))?;
+            .expect("failed to load the code; no root element");
 
         let mut cursor = source_file.walk();
-        Ok(body.named_children(&mut cursor).collect())
+        body.named_children(&mut cursor).collect()
     }
 
     fn is_leaf(node: &tree_sitter::Node) -> bool {
@@ -304,7 +300,8 @@ mod tests {
             .unwrap();
 
             let ptree = tree.to_partial();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -330,7 +327,8 @@ mod tests {
             .unwrap();
 
             let ptree = tree.to_partial();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -362,7 +360,8 @@ mod tests {
             .unwrap();
 
             let ptree = tree.to_partial();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 2);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -393,7 +392,8 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -407,7 +407,8 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -447,7 +448,8 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -493,7 +495,8 @@ mod tests {
             "#,
             )
             .unwrap();
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),
@@ -513,7 +516,8 @@ mod tests {
             )
             .unwrap();
 
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 2);
             assert_eq!(
                 c[1].get_captured_string(&MetavariableId("X".into())),
@@ -533,7 +537,8 @@ mod tests {
             )
             .unwrap();
 
-            let c = ptree.matches(&query).collect::<Vec<MatchedItem>>();
+            let session = ptree.matches(&query);
+            let c = session.collect::<Vec<MatchedItem>>();
             assert_eq!(c.len(), 1);
             assert_eq!(
                 c[0].get_captured_string(&MetavariableId("X".into())),

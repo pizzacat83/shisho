@@ -27,7 +27,7 @@ where
         };
 
         let tree = self.pattern.to_tstree()?;
-        let patched_item = T::extract_query_nodes(&tree)?;
+        let patched_item = T::get_query_nodes(&tree);
         let patched_item = patched_item
             .into_iter()
             .map(|node| processor.handle_node(node))
@@ -38,6 +38,15 @@ where
             .map(|item| item.body)
             .collect::<Vec<String>>()
             .join(""))
+    }
+}
+
+impl<T> AsRef<[u8]> for AutofixPattern<T>
+where
+    T: Queryable,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.pattern.as_ref()
     }
 }
 
@@ -54,7 +63,7 @@ where
     T: Queryable,
 {
     fn str_from_range(&self, start: usize, end: usize) -> String {
-        let raw = self.pattern.pattern.as_ref();
+        let raw = self.pattern.as_ref();
         String::from_utf8(raw[start..end].to_vec()).unwrap()
     }
 }
@@ -143,17 +152,8 @@ where
     }
 
     fn value_of(&self, node: &tree_sitter::Node) -> &'tree str {
-        let raw = self.pattern.pattern.as_ref();
+        let raw = self.pattern.as_ref();
         std::str::from_utf8(&raw[node.start_byte()..node.end_byte()]).unwrap()
-    }
-}
-
-impl<T> AsRef<[u8]> for AutofixPattern<T>
-where
-    T: Queryable,
-{
-    fn as_ref(&self) -> &[u8] {
-        self.pattern.as_ref()
     }
 }
 

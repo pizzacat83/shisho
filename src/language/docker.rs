@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 use super::Queryable;
 
 #[derive(Debug, Clone)]
@@ -14,16 +12,14 @@ impl Queryable for Dockerfile {
         tree_sitter_dockerfile_query::language()
     }
 
-    fn extract_query_nodes<'tree>(
-        root: &'tree tree_sitter::Tree,
-    ) -> Result<Vec<tree_sitter::Node<'tree>>> {
+    fn get_query_nodes<'tree>(root: &'tree tree_sitter::Tree) -> Vec<tree_sitter::Node<'tree>> {
         // TODO (y0n3uchy): this should be done more strictly.
 
         // see `//third_party/tree-sitter-dockerfile-query/grammar.js`
         let source_file = root.root_node();
 
         let mut cursor = source_file.walk();
-        Ok(source_file.named_children(&mut cursor).collect())
+        source_file.named_children(&mut cursor).collect()
     }
 
     fn is_leaf(_node: &tree_sitter::Node) -> bool {

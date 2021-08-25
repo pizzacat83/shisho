@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 use super::Queryable;
 
 #[derive(Debug, Clone)]
@@ -14,14 +12,12 @@ impl Queryable for Go {
         tree_sitter_go_query::language()
     }
 
-    fn extract_query_nodes<'tree>(
-        root: &'tree tree_sitter::Tree,
-    ) -> Result<Vec<tree_sitter::Node<'tree>>> {
+    fn get_query_nodes<'tree>(root: &'tree tree_sitter::Tree) -> Vec<tree_sitter::Node<'tree>> {
         // see `//third_party/tree-sitter-go-query/grammar.js`
         let source_file = root.root_node();
 
         let mut cursor = source_file.walk();
-        Ok(source_file.named_children(&mut cursor).collect())
+        source_file.named_children(&mut cursor).collect()
     }
 
     fn is_leaf(_node: &tree_sitter::Node) -> bool {

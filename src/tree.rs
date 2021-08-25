@@ -13,8 +13,9 @@ use std::{
 };
 
 pub struct Tree<T> {
+    pub(crate) tstree: tree_sitter::Tree,
+
     raw: Vec<u8>,
-    tstree: tree_sitter::Tree,
     _marker: PhantomData<T>,
 }
 
@@ -35,21 +36,10 @@ where
     }
 }
 
-impl<'a, 'tree, T> AsRef<tree_sitter::Tree> for Tree<T> {
-    fn as_ref(&self) -> &tree_sitter::Tree {
-        &self.tstree
-    }
-}
-
-impl<'a, 'tree, T> AsRef<[u8]> for Tree<T> {
-    fn as_ref(&self) -> &[u8] {
-        &self.raw
-    }
-}
-
 pub struct PartialTree<'tree, T> {
+    pub(crate) top: tree_sitter::Node<'tree>,
+
     raw: &'tree [u8],
-    top: tree_sitter::Node<'tree>,
     _marker: PhantomData<T>,
 }
 
@@ -72,19 +62,20 @@ where
     where
         'tree: 'query,
     {
-        QueryMatcher::new(self, query)
+        QueryMatcher::new(self, query).into_iter()
+    }
+
+    pub fn value_of(&self, node: &tree_sitter::Node<'tree>) -> &str {
+        node.utf8_text(self.raw).unwrap()
     }
 }
 
-impl<'tree, T> AsRef<tree_sitter::Node<'tree>> for PartialTree<'tree, T> {
-    fn as_ref(&self) -> &tree_sitter::Node<'tree> {
-        &self.top
-    }
-}
-
-impl<'tree, T> AsRef<[u8]> for PartialTree<'tree, T> {
+impl<'tree, T> AsRef<[u8]> for PartialTree<'tree, T>
+where
+    T: Queryable,
+{
     fn as_ref(&self) -> &[u8] {
-        &self.raw
+        self.raw
     }
 }
 
