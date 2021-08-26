@@ -9,6 +9,7 @@ use crate::{
     tree::PartialTree,
 };
 use anyhow::{anyhow, Result};
+use itertools::Itertools;
 use std::collections::HashMap;
 
 pub struct QueryMatcher<'tree, 'query, T>
@@ -34,18 +35,18 @@ impl<'tree, 'query, T> QueryMatcher<'tree, 'query, T>
 where
     T: Queryable,
 {
-    fn yield_next_node(&mut self) -> Option<tree_sitter::Node<'tree>> {
+    fn yield_next_sibilings(&mut self) -> Option<Vec<tree_sitter::Node<'tree>>> {
         if let Some(cursor) = self.cursor.as_mut() {
-            let node = cursor.node();
+            let nodes = cursor.node().children(&mut cursor.node().walk()).collect();
             if !cursor.goto_first_child() && !cursor.goto_next_sibling() {
                 while cursor.goto_parent() {
                     if cursor.goto_next_sibling() {
-                        return Some(node);
+                        return Some(nodes);
                     }
                 }
                 self.cursor = None;
             }
-            Some(node)
+            Some(nodes)
         } else {
             None
         }
@@ -69,16 +70,22 @@ where
         &self,
         tsibilings: Vec<tree_sitter::Node<'tree>>,
         qsibilings: Vec<tree_sitter::Node<'query>>,
-    ) -> Vec<MatcherState<'tree>> {
+    ) -> Vec<(MatcherState<'tree>, Option<tree_sitter::Node<'tree>>)> {
         let mut queue: Vec<(usize, usize, Vec<UnverifiedMetavariable>)> = vec![(0, 0, vec![])];
-        let mut result: Vec<MatcherState> = vec![];
+        let mut result: Vec<(MatcherState, Option<tree_sitter::Node<'tree>>)> = vec![];
 
         while let Some((tidx, qidx, captures)) = queue.pop() {
             match (tsibilings.get(tidx), qsibilings.get(qidx)) {
-                (None, None) => result.push(MatcherState {
-                    subtree: Some(ConsecutiveNodes::from(tsibilings.clone())),
-                    captures,
-                }),
+                (t, None) => result.push((
+                    MatcherState {
+                        subtree: Some(ConsecutiveNodes::from(
+                            tsibilings[..tidx.min(tsibilings.len())].to_vec(),
+                        )),
+                        captures,
+                    },
+                    t.map(|t| t.clone()),
+                )),
+
                 (Some(_tchild), Some(qchild)) if qchild.kind() == SHISHO_NODE_ELLIPSIS => {
                     let mut captured_nodes = vec![];
                     for tcidx in tidx..(tsibilings.len() + 1) {
@@ -132,7 +139,6 @@ where
     ) -> Vec<MatcherState<'tree>> {
         match (tnode, qnode) {
             (None, None) => {
-                // base case
                 vec![Default::default()]
             }
             (Some(tnode), Some(qnode)) => {
@@ -158,7 +164,6 @@ where
                         }
                     }
                     _ => {
-                        // verify tnode itself
                         if tnode.kind() != qnode.kind() {
                             return vec![];
                         }
@@ -173,9 +178,15 @@ where
                             .collect();
                         self.match_sibillings(tchildren, qchildren)
                             .into_iter()
-                            .map(|submatch| MatcherState {
-                                subtree: Some(subtree.clone()),
-                                captures: submatch.captures,
+                            .filter_map(|(submatch, trailling)| {
+                                if trailling.is_none() {
+                                    Some(MatcherState {
+                                        subtree: Some(subtree.clone()),
+                                        captures: submatch.captures,
+                                    })
+                                } else {
+                                    None
+                                }
                             })
                             .collect()
                     }
@@ -183,6 +194,28 @@ where
             }
             _ => vec![],
         }
+    }
+
+    fn to_verified_capture(
+        &self,
+        capture_items: Vec<CaptureItem<'tree>>,
+    ) -> Option<CaptureItem<'tree>> {
+        let mut it = capture_items.into_iter();
+        let first = it.next();
+        it.fold(first, |acc, capture| match acc {
+            Some(acc) => {
+                if self.is_equivalent_capture(&acc, &capture) {
+                    Some(capture)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        })
+    }
+
+    fn is_equivalent_capture(&self, a: &CaptureItem<'tree>, b: &CaptureItem<'tree>) -> bool {
+        a.to_string_with(self.tree.as_ref()) == b.to_string_with(self.tree.as_ref())
     }
 
     fn variable_name_of(&self, qnode: &tree_sitter::Node) -> &str {
@@ -208,38 +241,44 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let qnodes = self.query.tsnodes();
-        let ql = qnodes.len();
-        'iter: loop {
+        loop {
             if let Some(mitem) = self.items.pop() {
                 return Some(mitem);
             }
 
-            if let Some(tnode) = self.yield_next_node() {
-                let mut tsibilings = vec![];
-                let mut tnode = tnode;
-                while {
-                    if !T::is_skippable(&tnode) {
-                        tsibilings.push(tnode);
-                    }
-                    tsibilings.len() < ql
-                } {
-                    if let Some(tnode_) = tnode.next_sibling() {
-                        tnode = tnode_;
-                    } else {
-                        continue 'iter;
-                    }
-                }
+            if let Some(tnodes) = self.yield_next_sibilings() {
+                let tnodes: Vec<tree_sitter::Node> =
+                    tnodes.into_iter().filter(|x| !T::is_skippable(x)).collect();
+                for i in 0..tnodes.len() {
+                    let tsibilings = tnodes[i..].to_vec();
 
-                for mitem in self.match_sibillings(tsibilings, qnodes.clone()) {
-                    // TODO: convert matcherState -> MatchedItem validating equivalence
-                    self.items.push(MatchedItem {
-                        raw: self.tree.as_ref(),
-                        area: mitem.subtree.unwrap(),
-                        captures: mitem
+                    'mitem: for (mitem, _trailling) in
+                        self.match_sibillings(tsibilings, qnodes.clone())
+                    {
+                        let mut captures = HashMap::<MetavariableId, CaptureItem>::new();
+                        for (mid, capture_items) in mitem
                             .captures
                             .into_iter()
-                            .collect::<HashMap<MetavariableId, CaptureItem>>(),
-                    });
+                            .group_by(|k| k.0.clone())
+                            .into_iter()
+                        {
+                            if mid == MetavariableId("_".into()) {
+                                continue;
+                            }
+                            let capture_items = capture_items.into_iter().map(|x| x.1).collect();
+                            if let Some(c) = self.to_verified_capture(capture_items) {
+                                captures.insert(mid, c);
+                            } else {
+                                continue 'mitem;
+                            }
+                        }
+
+                        self.items.push(MatchedItem {
+                            raw: self.tree.as_ref(),
+                            area: mitem.subtree.unwrap(),
+                            captures,
+                        });
+                    }
                 }
             } else {
                 return None;
@@ -327,6 +366,16 @@ pub enum CaptureItem<'tree> {
     Empty,
     Literal(String),
     Nodes(ConsecutiveNodes<'tree>),
+}
+
+impl<'tree> CaptureItem<'tree> {
+    pub fn to_string_with(&'tree self, source: &'tree [u8]) -> &'tree str {
+        match self {
+            CaptureItem::Empty => "",
+            CaptureItem::Literal(s) => s.as_str(),
+            CaptureItem::Nodes(n) => n.utf8_text(source).unwrap(),
+        }
+    }
 }
 
 impl<'tree> From<Vec<tree_sitter::Node<'tree>>> for CaptureItem<'tree> {
